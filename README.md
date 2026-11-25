@@ -2,7 +2,6 @@
 
 Windows 上的射频 SI 自动化工具：从 PADS 原理图做到 SIwave 网络表、PCB S 参数抽取、ADS 仿真工程，以及手册式 refnum。
 
-本仓库放能跑的源码、入口和工作架构。不含样例工程、S 参数库和私钥。
 
 工作架构（六步、流程、工作区）：[docs/AutoSI架构.html](docs/AutoSI架构.html)  
 部署到新电脑：[docs/README.md](docs/README.md)
@@ -36,7 +35,6 @@ architecture/        主流程图
 requirements.txt
 ```
 
-**不会进这个仓：** FG 工程、S 参数库、授权 json、私钥、封库签发脚本、安装包、exe。
 
 ## 环境
 
