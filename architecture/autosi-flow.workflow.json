@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "AutoSI 主流程",
+    "quality_profile": "showcase",
+    "output": "architecture/autosi-flow.html"
+  },
+  "lanes": [
+    { "id": "gui", "label": "界面" },
+    { "id": "core", "label": "AutoSI" },
+    { "id": "tools", "label": "SIwave / ADS" },
+    { "id": "out", "label": "产物" }
+  ],
+  "phases": [
+    { "id": "prep", "label": "准备", "fromCol": 0, "toCol": 1 },
+    { "id": "extract", "label": "抽取", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "deliver", "label": "交付", "fromCol": 4, "toCol": 5 }
+  ],
+  "mainPath": ["workspace", "fn1", "fn2", "fn3", "fn5", "outputs"],
+  "nodes": [
+    { "id": "workspace", "lane": "gui", "col": 0, "type": "frontend", "label": "工作区", "sublabel": "INPUT 原理图 / PCB" },
+    { "id": "fn1", "lane": "core", "col": 1, "type": "backend", "label": "功能1", "sublabel": "先检查 NET_CLASS 50R" },
+    { "id": "fn2", "lane": "tools", "col": 2, "type": "external", "label": "功能2", "sublabel": "SIwave 抽 S 参数" },
+    { "id": "fn3", "lane": "tools", "col": 3, "type": "cloud", "label": "功能3", "sublabel": "生成 ADS 工程" },
+    { "id": "fn5", "lane": "core", "col": 4, "type": "backend", "label": "功能5", "sublabel": "手册构图" },
+    { "id": "fn6", "lane": "out", "col": 1, "type": "frontend", "label": "功能6", "sublabel": "Pin 路径 TXT" },
+    { "id": "outputs", "lane": "out", "col": 5, "type": "database", "label": "OUTPUT", "sublabel": "NETS · SPARAM · ADS" }
+  ],
+  "edges": [
+    { "from": "workspace", "to": "fn1", "label": "PADS TXT" },
+    { "from": "fn1", "to": "fn2", "label": "网络表", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "from": "fn2", "to": "fn3", "label": ".sNp" },
+    { "from": "fn3", "to": "fn5", "label": "仿真后手册" },
+    { "from": "fn5", "to": "outputs", "label": "xlsx" },
+    { "from": "fn1", "to": "fn6", "label": "拓扑", "role": "branch" },
+    { "from": "fn6", "to": "outputs", "role": "branch", "route": "straight", "fromSide": "right", "toSide": "left" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "一条主链",
+      "items": [
+        "工作区放原理图和 PCB，界面创建 INPUT / OUTPUT",
+        "功能1 没有 50R 网络会直接中止",
+        "网络表 → SIwave → ADS → 手册，顺序不能跳"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "旁路产物",
+      "items": [
+        "功能6 从功能1 的拓扑导出 Pin 路径",
+        "50R Tags 用独立的「原理图辅助」，不进主界面"
+      ]
+    }
+  ]
+}

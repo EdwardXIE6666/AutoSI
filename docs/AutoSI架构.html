@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AutoSI 架构介绍</title>
+<style>
+  :root {
+    --paper: #eef1f3;
+    --card: #fbfcfd;
+    --ink: #152028;
+    --muted: #5a6670;
+    --line: #c5ced4;
+    --mask: #12382e;
+    --mask-2: #1c5344;
+    --copper: #c47a3a;
+    --fill: #dde8e4;
+    --warn-bg: #fff6df;
+    --warn-ink: #6a4b00;
+    --a: #12382e;
+    --b: #1b4d8c;
+    --c: #5a3d12;
+    --d: #8a2b2b;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font: 15px/1.55 Bahnschrift, "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+  }
+  .bar {
+    position: sticky; top: 0; z-index: 8;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 8px 16px;
+    background: var(--mask);
+    color: #e8efe9;
+  }
+  .bar strong { font-size: 14px; letter-spacing: 0.04em; font-weight: 600; }
+  .bar nav { display: flex; gap: 6px; flex-wrap: wrap; }
+  .bar a {
+    color: #c5d8cf; text-decoration: none; font-size: 13px;
+    border: 1px solid transparent; padding: 4px 9px;
+  }
+  .bar a:hover, .bar a.on { color: #fff; border-color: #7aa894; background: var(--mask-2); }
+  .bar button {
+    margin-left: auto;
+    border: 1px solid #7aa894;
+    background: transparent;
+    color: #e8efe9;
+    padding: 5px 11px;
+    cursor: pointer;
+    font: inherit;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 22px 18px 72px; }
+  .hero h1 { font-size: 26px; line-height: 1.2; margin: 0 0 8px; font-weight: 600; }
+  .hero .lead { color: var(--muted); margin: 0 0 16px; max-width: 46em; }
+  .read {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 0 0 10px;
+  }
+  .read a {
+    display: block; text-decoration: none; color: inherit;
+    background: var(--card); border: 1px solid var(--line);
+    padding: 12px 12px 14px;
+  }
+  .read a:hover { border-color: var(--copper); }
+  .read .tag {
+    display: inline-block; font-size: 11px; letter-spacing: 0.08em;
+    color: #fff; padding: 2px 7px; margin-bottom: 8px;
+  }
+  .read .tag.a { background: var(--a); }
+  .read .tag.b { background: var(--b); }
+  .read .tag.c { background: var(--c); }
+  .read .tag.d { background: var(--d); }
+  .read b { display: block; font-size: 16px; margin-bottom: 4px; }
+  .read span { font-size: 13px; color: var(--muted); }
+
+  .zone, .appx, .fn { scroll-margin-top: 52px; }
+  .zone {
+    position: relative;
+    margin: 28px 0 8px;
+    padding: 0 0 8px 18px;
+    border-left: 3px solid var(--copper);
+  }
+  .zone.za { border-left-color: var(--a); }
+  .zone.zb { border-left-color: var(--b); }
+  .zone.zc { border-left-color: var(--c); }
+  .zone.zd { border-left-color: var(--d); }
+  .zone-head {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    margin: 0 0 6px;
+  }
+  .plate {
+    font-size: 12px; letter-spacing: 0.1em; color: #fff;
+    padding: 3px 8px; font-weight: 600;
+  }
+  .za .plate { background: var(--a); }
+  .zb .plate { background: var(--b); }
+  .zc .plate { background: var(--c); }
+  .zd .plate { background: var(--d); }
+  .zone h2 { font-size: 22px; margin: 0; font-weight: 600; }
+  h3 { font-size: 15px; margin: 18px 0 8px; }
+  p, li { color: var(--ink); }
+  .callout {
+    background: var(--warn-bg); color: var(--warn-ink);
+    border: 1px solid #ead7a0; padding: 10px 12px; margin: 12px 0;
+    font-size: 14px;
+  }
+  .callout.info { background: var(--fill); color: var(--ink); border-color: #b7cfc6; }
+  table.struct {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: var(--card);
+    margin: 4px 0 18px;
+    border: 1px solid var(--line);
+  }
+  table.struct caption {
+    caption-side: top;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    padding: 0 0 6px;
+  }
+  table.struct thead th {
+    background: #d8e3df;
+    font-weight: 600;
+    border: 1px solid var(--line);
+    padding: 7px 8px;
+    text-align: left;
+    vertical-align: bottom;
+  }
+  table.struct td, table.struct tbody th {
+    border: 1px solid var(--line);
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+    font-weight: 400;
+  }
+  table.struct tbody th[scope="row"] {
+    font-weight: 600;
+    white-space: nowrap;
+    background: #f3f6f5;
+  }
+  table.struct tr.sec th {
+    background: #12382e;
+    color: #e8efe9;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    padding: 5px 8px;
+  }
+  table.struct tr.sec-alt th { background: #1b4d8c; }
+  table.struct tr.sec-warn th { background: #8a2b2b; }
+  table.struct td.num, table.struct th.num {
+    width: 2.4em;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  table.struct col.c-num { width: 3.2em; }
+  table.struct col.c-name { width: 18%; }
+  table.struct col.c-pkg { width: 22%; }
+  table.struct col.c-yes { width: 8em; }
+  table.struct .yes { color: var(--mask-2); font-weight: 600; }
+  table.struct .no { color: var(--muted); }
+  table.struct .part { color: var(--c); font-weight: 600; }
+  code { font: 12px/1.4 "Cascadia Mono", Consolas, monospace; background: #e8ecea; padding: 1px 4px; }
+  .flow { overflow-x: auto; background: var(--card); border: 1px solid var(--line); padding: 8px; margin: 8px 0; }
+  .flow svg { display: block; }
+  .fn { break-inside: avoid; margin: 0 0 22px; padding: 0 0 4px; }
+  .fn h3 { margin-top: 0; }
+  .subnav { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 14px; }
+  .subnav a {
+    font-size: 12px; text-decoration: none; color: var(--b);
+    border: 1px solid #c5d4e8; background: #f3f6fb; padding: 3px 8px;
+  }
+  details {
+    background: var(--card); border: 1px solid var(--line);
+    padding: 8px 12px; margin: 10px 0;
+  }
+  details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  details[open] summary { margin-bottom: 8px; color: var(--ink); }
+  .appx { margin-top: 36px; padding-top: 8px; border-top: 1px dashed var(--line); }
+  .appx h2 { font-size: 18px; margin: 0 0 6px; }
+  @media print {
+    .bar, .read, .subnav { display: none; }
+    body { background: #fff; }
+    main { max-width: none; padding: 0; }
+    .zone { break-before: page; border-left: 2px solid #333; }
+    .zone.za { break-before: auto; }
+    table.struct, .fn, .flow { break-inside: avoid; }
+    table.struct tr.sec th { background: #333; color: #fff; }
+    details { border: 0; padding: 0; }
+    details summary { display: none; }
+  }
+  @media (max-width: 800px) {
+    .read { grid-template-columns: 1fr 1fr; }
+    .zone { padding-left: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="bar">
+  <strong>AutoSI 架构介绍</strong>
+  <nav>
+    <a href="#zone-a">A 使用</a>
+    <a href="#zone-b">B 流程</a>
+    <a href="#zone-c">C 工作区</a>
+    <a href="#appx">附录</a>
+  </nav>
+  <button type="button" onclick="window.print()">打印 / 另存 PDF</button>
+</div>
+<main>
+  <header class="hero">
+    <h1>AutoSI</h1>
+    <p class="lead">Windows 射频 SI 自动化：原理图 → 网络表 → SIwave S 参数 → ADS → 维修手册。</p>
+  </header>
+
+  <nav class="read" aria-label="工作架构">
+    <a href="#zone-a">
+      <span class="tag a">区 A</span>
+      <b>使用</b>
+      <span>侧栏六步，每步写出什么。</span>
+    </a>
+    <a href="#zone-b">
+      <span class="tag b">区 B</span>
+      <b>流程</b>
+      <span>各功能怎么走、描边为产物。</span>
+    </a>
+    <a href="#zone-c">
+      <span class="tag c">区 C</span>
+      <b>工作区</b>
+      <span>INPUT / OUTPUT 目录。</span>
+    </a>
+  </nav>
+
+  <section class="zone za" id="zone-a">
+    <div class="zone-head">
+      <span class="plate">区 A · 使用</span>
+      <h2>六步与产物</h2>
+    </div>
+
+    <div class="flow" id="pipe"></div>
+
+    <table class="struct">
+      <caption>六步与产物</caption>
+      <colgroup>
+        <col class="c-num"><col class="c-name"><col>
+      </colgroup>
+      <thead>
+        <tr>
+          <th scope="col" class="num">号</th>
+          <th scope="col">名称</th>
+          <th scope="col">写出</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row" class="num">1</th>
+          <td>网络频段信息</td>
+          <td><code>OUTPUT/NETS</code> 网络表，<code>OUTPUT/OTHER</code> 路径 PDF</td>
+        </tr>
+        <tr>
+          <th scope="row" class="num">2</th>
+          <td>初始化 SIwave</td>
+          <td>更新 <code>INPUT/*.siw</code>（叠层 / ODB，不抽 S 参数）</td>
+        </tr>
+        <tr>
+          <th scope="row" class="num">3</th>
+          <td>SIwave 抽取</td>
+          <td><code>OUTPUT/SPARAM</code> PCB .sNp</td>
+        </tr>
+        <tr>
+          <th scope="row" class="num">4</th>
+          <td>ADS 仿真</td>
+          <td><code>OUTPUT/ADS</code></td>
+        </tr>
+        <tr>
+          <th scope="row" class="num">5</th>
+          <td>refnum 手册</td>
+          <td>路径预览 + <code>*_refnum.xlsx</code></td>
+        </tr>
+        <tr>
+          <th scope="row" class="num">6</th>
+          <td>器件 Pin 路径</td>
+          <td><code>OUTPUT/OTHER/*_Device_Pin_Path.txt</code></td>
+        </tr>
+      </tbody>
+    </table>
+    <p>打开 <code>程序\MAIN.exe</code>，侧栏 1–6 即上表。工作区是 <code>FG*/INPUT</code> 与 <code>OUTPUT</code>。</p>
+  </section>
+
+  <section class="zone zb" id="zone-b">
+    <div class="zone-head">
+      <span class="plate">区 B · 流程</span>
+      <h2>各功能怎么走</h2>
+    </div>
+    <p>描边为该步写出的文件。功能 1、4、5、6 共用前半段（剖析与追径）。</p>
+    <nav class="subnav">
+      <a href="#fn-share">共用前半段</a>
+      <a href="#fn-1">01 网络表</a>
+      <a href="#fn-2">02 初始化</a>
+      <a href="#fn-3">03 抽取</a>
+      <a href="#fn-4">04 ADS</a>
+      <a href="#fn-5">05 手册</a>
+      <a href="#fn-6">06 Pin</a>
+    </nav>
+    <div id="fn-root"></div>
+  </section>
+
+  <section class="zone zc" id="zone-c">
+    <div class="zone-head">
+      <span class="plate">区 C · 工作区</span>
+      <h2>INPUT / OUTPUT</h2>
+    </div>
+    <table class="struct">
+      <caption>工作区目录</caption>
+      <colgroup>
+        <col class="c-pkg"><col class="c-num"><col>
+      </colgroup>
+      <thead>
+        <tr>
+          <th scope="col">目录</th>
+          <th scope="col" class="num">功能</th>
+          <th scope="col">内容</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="sec"><th colspan="3" scope="colgroup">输入</th></tr>
+        <tr>
+          <th scope="row"><code>INPUT</code></th>
+          <td class="num">—</td>
+          <td>原理图、SIwave 工程、叠层等</td>
+        </tr>
+      </tbody>
+      <tbody>
+        <tr class="sec"><th colspan="3" scope="colgroup">输出</th></tr>
+        <tr>
+          <th scope="row"><code>OUTPUT/NETS</code></th>
+          <td class="num">1</td>
+          <td>网络表</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>OUTPUT/SPARAM</code></th>
+          <td class="num">3</td>
+          <td>PCB S 参数</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>OUTPUT/ADS</code></th>
+          <td class="num">4</td>
+          <td>ADS 工程</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>OUTPUT/refnum</code></th>
+          <td class="num">5</td>
+          <td>路径预览与手册 Excel</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>OUTPUT/OTHER</code></th>
+          <td class="num">1 / 6</td>
+          <td>路径 PDF、器件 Pin 路径</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>OUTPUT/LOG</code></th>
+          <td class="num">1–6</td>
+          <td>各功能运行日志</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>每个项目一个 <code>FG*</code> 文件夹，里面是 <code>INPUT</code> 和 <code>OUTPUT</code>。</p>
+  </section>
+
+  <section class="appx" id="appx">
+    <h2>附录</h2>
+    <table class="struct">
+      <caption>快捷键</caption>
+      <thead>
+        <tr>
+          <th scope="col">键</th>
+          <th scope="col">作用</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">Ctrl+Enter</th><td>运行当前功能</td></tr>
+        <tr><th scope="row">Ctrl+R</th><td>刷新输入</td></tr>
+        <tr><th scope="row">Ctrl+B</th><td>折叠侧栏</td></tr>
+        <tr><th scope="row">Alt+1 … Alt+6</th><td>切换功能</td></tr>
+        <tr><th scope="row">Esc</th><td>运行中终止</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+const FLOWS = [
+  {
+    id: "share",
+    title: "01 / 04 / 05 / 06 共用前半段",
+    blurb: "功能 1、4、5、6 先剖析原理图、追径并分段，再各自写出结果。",
+    note: "GNSS 天线只出路径 PDF，不进网络表。",
+    labels: {lic:"授权",parse:"剖析原理图",gate:"50R 检查",plat:"识别平台",snp:"加载器件 SNP",gps:"GPS 追径",fbrx:"FBRX 追径",palna:"PA/LNA 追径",graph:"建射频图",rev:"按天线反向",seg:"分段",pdf:"路径 PDF"},
+    edges: [["lic","parse"],["parse","gate"],["gate","plat"],["plat","snp"],["snp","gps"],["snp","fbrx"],["snp","palna"],["gps","graph"],["fbrx","graph"],["palna","graph"],["graph","rev"],["rev","seg"],["rev","pdf"]],
+    accent: ["seg","pdf"]
+  },
+  {
+    id: "1",
+    title: "01 网络频段信息",
+    blurb: "共用前半段之后写出网络表。路径 PDF 在反向时已生成。",
+    labels: {share:"共用前半段",skip:"跳过 GNSS 抽参网",write:"写网络表",out:"OUTPUT/NETS"},
+    edges: [["share","skip"],["skip","write"],["write","out"]],
+    accent: ["out"]
+  },
+  {
+    id: "2",
+    title: "02 初始化 SIwave",
+    blurb: "更新 INPUT 里的 .siw：导入叠层、去使能 R/L/C，或从 ODB++ 新建工程。不抽 S 参数。",
+    labels: {pick:"选 .siw 或 ODB",odb:"从 ODB 建工程",init:"导叠层",rlc:"去使能 R/L/C",save:"保存 .siw"},
+    edges: [["pick","odb"],["pick","init"],["odb","save"],["init","rlc"],["rlc","save"]],
+    accent: ["save"]
+  },
+  {
+    id: "3",
+    title: "03 SIwave 抽取",
+    blurb: "读功能 1 的网络表，按段打端口、求解，写出 PCB S 参数。",
+    labels: {inn:"siw + 网络表",read:"读网络表",port:"打端口 + 裁板",solve:"求解",snp:"导出 .sNp"},
+    edges: [["inn","read"],["read","port"],["port","solve"],["solve","snp"]],
+    accent: ["snp"]
+  },
+  {
+    id: "4",
+    title: "04 ADS 仿真",
+    blurb: "搭建 ADS 库和各天线原理图，修 SnP，写出 ADS 工程。可选 50R 匹配。",
+    labels: {share:"共用前半段",lib:"建 ADS 库",cell:"各天线原理图",fix:"修 SnP",match:"可选 50R 匹配",out:"OUTPUT/ADS"},
+    edges: [["share","lib"],["lib","cell"],["cell","fix"],["fix","match"],["fix","out"],["match","out"]],
+    accent: ["out"]
+  },
+  {
+    id: "5",
+    title: "05 refnum 手册",
+    blurb: "先算路径并写预览，再排出手册 Excel。预览不是手册。",
+    labels: {share:"共用前半段",a:"算路径",prev:"路径预览",place:"手册排版",xlsx:"手册 Excel"},
+    edges: [["share","a"],["a","prev"],["a","place"],["place","xlsx"]],
+    accent: ["prev","xlsx"]
+  },
+  {
+    id: "6",
+    title: "06 器件 Pin 路径",
+    blurb: "按天线口把 Transceiver 到 ANT 的器件 Pin 写成 TXT。",
+    labels: {share:"共用前半段",paths:"TRX / FE / ANT 路径",pin:"解析入出 Pin",stitch:"按天线缝合",write:"写 TXT"},
+    edges: [["share","paths"],["paths","pin"],["pin","stitch"],["stitch","write"]],
+    accent: ["write"]
+  }
+];
+
+function layoutDAG(ids, edges, nodeW, nodeH, rankGap, nodeGap, pad) {
+  const preds = {}, succs = {};
+  ids.forEach(id => { preds[id] = []; succs[id] = []; });
+  edges.forEach(([a, b]) => { succs[a].push(b); preds[b].push(a); });
+  const rank = {};
+  function r(id, seen) {
+    if (rank[id] != null) return rank[id];
+    if (seen.has(id)) return 0;
+    seen.add(id);
+    rank[id] = preds[id].length ? Math.max(...preds[id].map(p => r(p, seen))) + 1 : 0;
+    return rank[id];
+  }
+  ids.forEach(id => r(id, new Set()));
+  const byRank = {};
+  ids.forEach(id => { (byRank[rank[id]] ||= []).push(id); });
+  const ranks = Object.keys(byRank).map(Number).sort((a, b) => a - b);
+  const nodes = {};
+  let width = pad, height = pad;
+  ranks.forEach(rk => {
+    byRank[rk].forEach((id, i) => {
+      const x = pad + rk * (nodeW + rankGap);
+      const y = pad + i * (nodeH + nodeGap);
+      nodes[id] = { x, y, cx: x + nodeW, cy: y + nodeH / 2, mx: x, my: y + nodeH / 2 };
+      width = Math.max(width, x + nodeW + pad);
+      height = Math.max(height, y + nodeH + pad);
+    });
+  });
+  return { nodes, width, height, nodeW, nodeH };
+}
+
+function drawFlow(mount, spec, nodeW) {
+  const ids = Object.keys(spec.labels);
+  const L = layoutDAG(ids, spec.edges, nodeW, 40, 36, 14, 10);
+  const accent = new Set(spec.accent || []);
+  const lines = spec.edges.map(([a, b]) => {
+    const A = L.nodes[a], B = L.nodes[b];
+    return `<line x1="${A.cx}" y1="${A.cy}" x2="${B.mx}" y2="${B.my}" stroke="#b7b4ab" stroke-width="1"/>`;
+  }).join("");
+  const boxes = ids.map(id => {
+    const n = L.nodes[id];
+    const hot = accent.has(id);
+    return `<g>
+      <rect x="${n.x}" y="${n.y}" width="${L.nodeW}" height="${L.nodeH}" rx="6"
+        fill="${hot ? "#dde8e4" : "#fff"}" stroke="${hot ? "#12382e" : "#c8c5bb"}"/>
+      <text x="${n.x + L.nodeW / 2}" y="${n.y + 25}" text-anchor="middle" fill="#152028" font-size="11">${spec.labels[id]}</text>
+    </g>`;
+  }).join("");
+  mount.innerHTML = `<svg width="${L.width}" height="${L.height}" viewBox="0 0 ${L.width} ${L.height}" role="img" aria-label="${spec.title || ""}">${lines}${boxes}</svg>`;
+}
+
+drawFlow(document.getElementById("pipe"), {
+  labels: {pads:"PADS 原理图",profile:"剖析 + 追径",nets:"网络表",siw:"SIwave 工程",snp:"PCB S 参数",ads:"ADS 工程",preview:"路径预览",handbook:"手册 Excel",pin:"Pin 路径",pdf:"路径 PDF"},
+  edges: [["pads","profile"],["profile","nets"],["profile","pdf"],["profile","preview"],["profile","pin"],["profile","ads"],["siw","snp"],["nets","snp"],["snp","ads"],["preview","handbook"]],
+  accent: ["nets","snp","ads","handbook","pin","pdf"],
+  title: "端到端流水线"
+}, 112);
+
+const root = document.getElementById("fn-root");
+FLOWS.forEach(spec => {
+  const wrap = document.createElement("section");
+  wrap.className = "fn";
+  wrap.id = "fn-" + spec.id;
+  wrap.innerHTML = `<h3>${spec.title}</h3>
+    <p>${spec.blurb}</p>
+    ${spec.note ? `<div class="callout info">${spec.note}</div>` : ""}
+    <div class="flow"></div>`;
+  root.appendChild(wrap);
+  drawFlow(wrap.querySelector(".flow"), spec, 118);
+});
+
+const navLinks = [...document.querySelectorAll(".bar nav a")];
+const sections = ["zone-a", "zone-b", "zone-c", "appx"]
+  .map(id => document.getElementById(id))
+  .filter(Boolean);
+const io = new IntersectionObserver((entries) => {
+  const vis = entries.filter(e => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+  if (!vis) return;
+  navLinks.forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + vis.target.id));
+}, { rootMargin: "-20% 0px -60% 0px", threshold: [0, 0.2, 0.5] });
+sections.forEach(s => io.observe(s));
+</script>
+</body>
+</html>

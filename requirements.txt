@@ -1,0 +1,8 @@
+pywin32>=306
+# 正式 GUI（发布版由 Nuitka 内嵌 Qt，无需目标机另装）
+PySide6-Essentials==6.10.1
+# S参数库完整性签名（封库/校验，编译进 MAIN.exe）
+cryptography>=42.0
+# Optional, only needed when use_gui_fallback is enabled:
+# pyautogui>=0.9.54
+pytest>=8.0

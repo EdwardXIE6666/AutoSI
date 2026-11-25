@@ -1,0 +1,5 @@
+"""AutoSI 构建限时授权信息（由打包流程自动刷新）。"""
+
+BUILD_ID = "20261030085223"
+BUILD_ISSUED_AT = "2026-10-30"
+BUILD_EXPIRES_AT = "2026-12-01"

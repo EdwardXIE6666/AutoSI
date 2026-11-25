@@ -1,0 +1,547 @@
+// 批量"Apply" SnP 控件 v4。
+//
+// 根因: SnP(Pcell) 重求值的端口名显示路径要测量文字宽度，环境中
+// INST_TEXT_FONT/TEXT_POINT 偏好为空时在
+// snp_ael_artwork_macro_functions.ael line 699 报 multiply NULL，
+// 求值取消、控件消失。v4 在触发重建前先补上这两个偏好。
+//
+// 用法:
+//   load("C:/Project/autosi/fix_snp.ael");
+//   fix_all_snp();           // 补偏好 + 重建引脚 + 端口名显示
+//   fix_all_snp_nonames();   // 保底: 若上面仍报错, 关掉端口名显示重建
+//
+// 每个原理图窗口激活后各执行一次。目检无误后再保存。
+// 批量修复（fix_snp_auto.ael）过程中不弹 de_info；结束时 fix_snp_report() 一次汇总。
+// 计数用文件级 decl（与 match_50r.ael 相同）。不要用 ADS declare 去建变量。
+
+decl _fix_n_sch = 0;
+decl _fix_n_sym = 0;
+decl _fix_n_fail = 0;
+decl _fix_fails = "";
+decl _fix_log_path = "";
+decl _fix_log_buf = "";
+decl _fix_log_head = "";
+decl _fix_n_log = 0;
+decl _fix_n_pins = 0;
+decl _fix_n_mism = 0;
+decl _fix_seg_cells = list();
+
+defun _fix_reset_stats()
+{
+    _fix_seg_cells = list();
+    _fix_n_sch = 0;
+    _fix_n_sym = 0;
+    _fix_n_fail = 0;
+    _fix_fails = "";
+    _fix_n_mism = 0;
+    _fix_log_buf = "";
+    _fix_log_head = "";
+    _fix_n_log = 0;
+    _fix_n_pins = 0;
+}
+
+defun _fix_ok_sch()
+{
+    _fix_n_sch = _fix_n_sch + 1;
+}
+
+defun _fix_ok_sym()
+{
+    _fix_n_sym = _fix_n_sym + 1;
+}
+
+defun _fix_fail(name)
+{
+    _fix_n_fail = _fix_n_fail + 1;
+    _fix_fails = strcat(_fix_fails, " ", name);
+}
+
+defun fix_snp_report()
+{
+    decl msg = strcat("fix_snp: schematic=", identify_value(_fix_n_sch),
+                      " symbol=", identify_value(_fix_n_sym),
+                      " fail=", identify_value(_fix_n_fail),
+                      " hier=v9 pins=", identify_value(_fix_n_pins),
+                      " segcells=", identify_value(listlen(_fix_seg_cells)),
+                      " mism=", identify_value(_fix_n_mism));
+    if (_fix_fails != "")
+        msg = strcat(msg, _fix_fails);
+    // 诊断日志一次写盘（"W"）。写不出来就在弹窗里说。
+    decl logState = "nolog";
+    if (_fix_log_path != "")
+    {
+        decl fid = fopen(_fix_log_path, "W");
+        if (fid != NULL)
+        {
+            fputs(fid, _fix_log_buf);
+            fclose(fid);
+            logState = _fix_log_path;
+        }
+        else
+            logState = "FAIL";
+    }
+    msg = strcat(msg, "\nlog=", logState);
+    // 弹窗里直接带前几只层级脚，文件看不到也能核对。
+    if (_fix_log_head != "")
+        msg = strcat(msg, "\n", _fix_log_head);
+    de_info(msg);
+}
+
+defun _snp_touch_numports(context, designName)
+{
+    decl items = list();
+    decl iter = db_create_inst_iter(context);
+    while (db_inst_iter_is_valid(iter))
+    {
+        decl inst = db_inst_iter_get_instance(iter);
+        if (db_get_instance_cell_name(inst) == "SnP")
+        {
+            decl np = db_get_instance_parm(designName, inst, "NumPorts");
+            if (np > 0)
+                items = append(items, list(list(db_get_instance_name(inst), int(np))));
+        }
+        iter = db_inst_iter_get_next(iter);
+    }
+
+    decl i;
+    for (i = 0; i < listlen(items); i++)
+    {
+        decl nm = nth(0, nth(i, items));
+        decl np = nth(1, nth(i, items));
+        // NumPorts 先置 1 再还原，强制触发 Pcell 重求值重建引脚
+        db_update_parameters_ex(context, list(nm, "NumPorts", 1));
+        db_update_parameters_ex(context, list(nm, "NumPorts", np));
+    }
+    return listlen(items);
+}
+
+defun fix_all_snp()
+{
+    decl context = de_get_current_design_context();
+    if (context == NULL)
+    {
+        de_info("fix_all_snp: please open a schematic window first.");
+        return;
+    }
+    // 治本：补齐端口名文字测量所需的偏好（缺失即 line 699 multiply NULL）
+    // 第三参传设计上下文（与官方 artwork.ael 的用法一致）
+    de_set_preference(INST_TEXT_FONT_P, "Arial For CAE", context);
+    de_set_preference(TEXT_POINT_P, 5, context);
+
+    decl n = _snp_touch_numports(context, db_get_design_name(context));
+    de_info(strcat("fix_all_snp v4: refreshed SnP count = ", identify_value(n)));
+}
+
+// 按设计名处理（无需打开窗口），处理完静默保存。
+// designName 格式 "libName:cellName:schematic"
+defun fix_design(designName)
+{
+    decl context = db_get_design_context_from_name(designName, APPEND_DSN_MODE);
+    if (context == NULL)
+    {
+        _fix_fail(designName);
+        return -1;
+    }
+    de_set_preference(INST_TEXT_FONT_P, "Arial For CAE", context);
+    de_set_preference(TEXT_POINT_P, 5, context);
+    decl n = _snp_touch_numports(context, db_get_design_name(context));
+    db_save_design_without_prompting(context);
+    _fix_ok_sch();
+    return n;
+}
+
+defun fix_all_snp_nonames()
+{
+    decl context = de_get_current_design_context();
+    if (context == NULL)
+    {
+        de_info("fix_all_snp_nonames: please open a schematic window first.");
+        return;
+    }
+    // 保底：清空 port_name_list（关闭端口名显示，绕开文字测量路径）
+    decl names = list();
+    decl iter = db_create_inst_iter(context);
+    while (db_inst_iter_is_valid(iter))
+    {
+        decl inst = db_inst_iter_get_instance(iter);
+        if (db_get_instance_cell_name(inst) == "SnP")
+            names = append(names, list(db_get_instance_name(inst)));
+        iter = db_inst_iter_get_next(iter);
+    }
+    decl i;
+    for (i = 0; i < listlen(names); i++)
+        db_update_parameters_ex(context, list(nth(i, names), "port_name_list", ""));
+
+    decl n = _snp_touch_numports(context, db_get_design_name(context));
+    de_info(strcat("fix_all_snp_nonames: refreshed SnP count = ", identify_value(n)));
+}
+
+// 天线网：MAIN_ANT / DIV_ANT / ANT2。芯片网（DPX1401_6）不算。
+defun _name_is_ant(nm)
+{
+    if (nm == "")
+        return 0;
+    if (nm == "MAIN_ANT")
+        return 1;
+    if (index(nm, "_ANT") > 0)
+        return 1;
+    if (index(nm, "ANT") == 1)
+        return 1;
+    return 0;
+}
+
+// 名单改成左芯片、右天线。dual 脚号/遍历序不可信。
+defun _names_ant_on_right(names)
+{
+    decl chip = list();
+    decl ant = list();
+    decl i;
+    for (i = 0; i < listlen(names); i++)
+    {
+        decl n = nth(i, names);
+        if (_name_is_ant(n))
+            ant = append(ant, list(n));
+        else
+            chip = append(chip, list(n));
+    }
+    return append(chip, ant);
+}
+
+// InstPin → 端子名。没有 db_get_inst_pin_term；须经 InstTerm。
+defun _pin_term_name(pin)
+{
+    decl iterm = db_get_inst_pin_inst_term(pin);
+    if (iterm == NULL)
+        return "";
+    return db_get_inst_term_name(iterm);
+}
+
+// names 里非空项 = 本通路允许贴网标的 term 名。空串不匹配。
+defun _name_in_list(names, nm)
+{
+    if (nm == "")
+        return 0;
+    decl i;
+    for (i = 0; i < listlen(names); i++)
+    {
+        decl x = nth(i, names);
+        if ((x != "") && (x == nm))
+            return 1;
+    }
+    return 0;
+}
+
+// 诊断日志（hier_pins.log）。路径由 fix_snp_auto.ael 传入；为空则不写。
+defun _fix_set_log(path)
+{
+    _fix_log_path = path;
+    _fix_n_mism = 0;
+}
+
+// 攒进内存，fix_snp_report 一次写盘（逐行 fopen("A") 在 ads.exe 里写不出文件）。
+defun _fix_log(line)
+{
+    _fix_n_log = _fix_n_log + 1;
+    _fix_log_buf = strcat(_fix_log_buf, line, "\n");
+    if (_fix_n_log <= 8)
+        _fix_log_head = strcat(_fix_log_head, line, "\n");
+}
+
+// xs 里第 i 项按 X 从小到大的名次（同值按下标）。
+defun _rank_x(xs, i)
+{
+    decl r = 0;
+    decl j;
+    decl xi = nth(i, xs);
+    for (j = 0; j < listlen(xs); j++)
+    {
+        decl xj = nth(j, xs);
+        if ((xj < xi) || ((xj == xi) && (j < i)))
+            r = r + 1;
+    }
+    return r;
+}
+
+// 母 symbol 引脚：按 X 从左到右排好的端子名。盒内 port 文字就是从这些 Pin 画出来的，
+// 所以按它贴网标必然和盒内一致，不受实例 InstTerm 是否过期影响。
+defun _sym_pin_names_by_x(inst)
+{
+    decl lib = db_get_instance_library_name(inst);
+    decl cell = db_get_instance_cell_name(inst);
+    decl symctx = db_get_design_context_from_name(strcat(lib, ":", cell, ":symbol"), APPEND_DSN_MODE);
+    if (symctx == NULL)
+        return list();
+    decl xs = list();
+    decl nms = list();
+    decl pit = db_create_pin_iter(symctx);
+    while (db_pin_iter_is_valid(pit))
+    {
+        decl pin = db_pin_iter_get_pin(pit);
+        decl sp = db_get_pin_snap_point(pin);
+        xs = append(xs, list(db_get_x(sp)));
+        nms = append(nms, list(db_get_pin_term_name(pin)));
+        pit = db_pin_iter_get_next(pit);
+    }
+    decl ordered = list();
+    decl k;
+    for (k = 0; k < listlen(xs); k++)
+        ordered = append(ordered, list(""));
+    decl i;
+    for (i = 0; i < listlen(xs); i++)
+    {
+        decl r = _rank_x(xs, i);
+        decl out = list();
+        decl j;
+        for (j = 0; j < listlen(ordered); j++)
+        {
+            if (j == r)
+                out = append(out, list(nth(i, nms)));
+            else
+                out = append(out, list(nth(j, ordered)));
+        }
+        ordered = out;
+    }
+    return ordered;
+}
+
+// 层级 X_* 实例：每脚画短线 + 网标。网标 = 母 symbol 同 X 名次的 Pin 端子名。
+// onlyUnwired=1 时跳过已接线的脚。每脚把 InstTerm 名和母 symbol 名一并写日志。
+defun _hier_wire_inst(context, inst, onlyUnwired)
+{
+    decl instName = db_get_instance_name(inst);
+    decl f = db_get_uu_to_dbu_factor(context);
+    decl bb = db_get_instance_bbox(inst, 0);
+    decl cx = ((db_get_bbox_x1(bb) + db_get_bbox_x2(bb)) / 2.0) / f;
+    decl uxs = list();
+    decl uys = list();
+    decl tns = list();
+    decl tnms = list();
+    decl skip = list();
+    decl pit = db_create_inst_pin_iter(inst);
+    while (db_inst_pin_iter_is_valid(pit))
+    {
+        decl pin = db_inst_pin_iter_get_inst_pin(pit);
+        decl sp = db_get_inst_pin_snap_point(pin);
+        uxs = append(uxs, list(db_get_x(sp) / f));
+        uys = append(uys, list(db_get_y(sp) / f));
+        tns = append(tns, list(db_get_inst_pin_term_number(pin)));
+        tnms = append(tnms, list(_pin_term_name(pin)));
+        if (db_is_inst_pin_connected_to_wire(pin))
+            skip = append(skip, list(1));
+        else
+            skip = append(skip, list(0));
+        pit = db_inst_pin_iter_get_next(pit);
+    }
+    decl symNames = _sym_pin_names_by_x(inst);
+    decl drawn = 0;
+    decl i;
+    for (i = 0; i < listlen(uxs); i++)
+    {
+        decl sx = nth(i, uxs);
+        decl sy = nth(i, uys);
+        decl r = _rank_x(uxs, i);
+        decl nm = "";
+        if (r < listlen(symNames))
+            nm = nth(r, symNames);
+        if (nm == "")
+            nm = nth(i, tnms);
+        if (nm != nth(i, tnms))
+            _fix_n_mism = _fix_n_mism + 1;
+        _fix_n_pins = _fix_n_pins + 1;
+        _fix_log(strcat("PIN ", db_get_design_name(context), " ", instName,
+                        " pin=", identify_value(i), " termNum=", identify_value(nth(i, tns)),
+                        " instTerm=", nth(i, tnms), " symPin=", nm,
+                        " x=", identify_value(sx), " y=", identify_value(sy),
+                        " wired=", identify_value(nth(i, skip))));
+        if ((onlyUnwired == 1) && (nth(i, skip) == 1))
+            continue;
+        if (nm != "")
+        {
+            decl ex = sx + 1.0;
+            if (sx < cx)
+                ex = sx - 1.0;
+            db_add_wire(context, sx, sy, ex, sy);
+            db_add_wire_label_at(context, sx, sy, 0.1, nm);
+            drawn = drawn + 1;
+        }
+    }
+    return drawn;
+}
+
+// ── 方案B：按引脚真实坐标画飘线 ──
+// 网标 = 这只脚盒子上的 term 名（Display），且必须出现在通路名单里。
+// 不要按 term 号/遍历下标去名单里取：Channel 布局下 term 号≠口序，
+// 空名再按下标回退会把 U1501_1 贴到 U1501_14、把 U1501_3 贴到 11_RFOUT2。
+// 层级 X_* 交给 _hier_wire_inst（母 symbol 引脚定名）。
+defun _snp_wire_one(context, instName, names)
+{
+    decl inst = db_find_instance_ex(context, instName);
+    if (inst == NULL)
+    {
+        _fix_log(strcat("NOTFOUND ", db_get_design_name(context), " ", instName));
+        return 0;
+    }
+    if ((index(instName, "X_") == 1) || _cell_is_segment(db_get_instance_cell_name(inst)))
+        return _hier_wire_inst(context, inst, 0);
+    decl f = db_get_uu_to_dbu_factor(context);
+    decl bb = db_get_instance_bbox(inst, 0);
+    decl cx = ((db_get_bbox_x1(bb) + db_get_bbox_x2(bb)) / 2.0) / f;
+    decl uxs = list();
+    decl uys = list();
+    decl tnms = list();
+    decl pit = db_create_inst_pin_iter(inst);
+    while (db_inst_pin_iter_is_valid(pit))
+    {
+        decl pin = db_inst_pin_iter_get_inst_pin(pit);
+        decl sp = db_get_inst_pin_snap_point(pin);
+        uxs = append(uxs, list(db_get_x(sp) / f));
+        uys = append(uys, list(db_get_y(sp) / f));
+        tnms = append(tnms, list(_pin_term_name(pin)));
+        pit = db_inst_pin_iter_get_next(pit);
+    }
+    decl drawn = 0;
+    decl i;
+    for (i = 0; i < listlen(uxs); i++)
+    {
+        decl sx = nth(i, uxs);
+        decl sy = nth(i, uys);
+        decl nm = nth(i, tnms);
+        if (_name_in_list(names, nm) == 0)
+            continue;
+        decl ex = sx + 1.0;
+        if (sx < cx)
+            ex = sx - 1.0;
+        db_add_wire(context, sx, sy, ex, sy);
+        db_add_wire_label_at(context, sx, sy, 0.1, nm);
+        drawn = drawn + 1;
+    }
+    return drawn;
+}
+
+// 段 cell：gen_segment_symbol 处理过的 cell（如 016_MAIN_ANT_COM）。实例名不可信时按 cell 认。
+defun _cell_is_segment(cell)
+{
+    if (cell == NULL)
+        return 0;
+    decl i;
+    for (i = 0; i < listlen(_fix_seg_cells); i++)
+    {
+        if (nth(i, _fix_seg_cells) == cell)
+            return 1;
+    }
+    return 0;
+}
+
+// 子页嵌的段 symbol：未接线的脚补短线 + 网标（漏登记的 X_* 兜底）。
+defun _hier_wire_one(context, inst)
+{
+    return _hier_wire_inst(context, inst, 1);
+}
+
+defun _hier_wire_all(context)
+{
+    decl drawn = 0;
+    decl iter = db_create_inst_iter(context);
+    while (db_inst_iter_is_valid(iter))
+    {
+        decl inst = db_inst_iter_get_instance(iter);
+        decl nm = db_get_instance_name(inst);
+        decl cell = db_get_instance_cell_name(inst);
+        // 诊断：每个实例的名字/cell/库，查 X_* 为什么找不到。
+        _fix_log(strcat("INST ", db_get_design_name(context), " name=", nm,
+                        " cell=", cell, " lib=", db_get_instance_library_name(inst)));
+        // ADS AEL 用 index，找到返回从 1 起的位置；没有 search。
+        // 实例名可能被 ADS 改掉；段 cell 由 gen_segment_symbol 登记。
+        if ((index(nm, "X_") == 1) || _cell_is_segment(cell))
+            drawn = drawn + _hier_wire_one(context, inst);
+        iter = db_inst_iter_get_next(iter);
+    }
+    return drawn;
+}
+
+// 按设计名处理(无需开窗)：补字体偏好 → 引脚落位 → 逐 SnP 画飘线 → 静默保存。
+// snpList 为 list(list(实例名, 净名列表), ...)。designName 格式 "lib:cell:schematic"。
+defun fix_design_with_wires(designName, snpList)
+{
+    decl context = db_get_design_context_from_name(designName, APPEND_DSN_MODE);
+    if (context == NULL)
+    {
+        _fix_fail(designName);
+        return -1;
+    }
+    de_set_preference(INST_TEXT_FONT_P, "Arial For CAE", context);
+    de_set_preference(TEXT_POINT_P, 5, context);
+    decl np = _snp_touch_numports(context, db_get_design_name(context));
+    decl total = 0;
+    decl i;
+    for (i = 0; i < listlen(snpList); i++)
+    {
+        decl entry = nth(i, snpList);
+        total = total + _snp_wire_one(context, nth(0, entry), nth(1, entry));
+    }
+    total = total + _hier_wire_all(context);
+    db_save_design_without_prompting(context);
+    _fix_ok_sch();
+    return total;
+}
+
+// 仿真口 TermG 带 Num，进 dual symbol 会变成层级端口；子页再放同号 TermG
+// 即 Duplicate Port，ADS 关掉一只脚、网标对不上。生成 symbol 前先关掉，只留 Pin。
+defun _sym_sim_port_cell(cell)
+{
+    return ((cell == "Term") || (cell == "TermG")
+            || (cell == "S_Param") || (cell == "VSWR"));
+}
+
+defun _sym_toggle_sim_ports(on)
+{
+    // 调用方必须先把 schematic 提到当前窗口。批处理没有窗口时
+    // de_get_current_design_context 会直接报错。
+    decl context = de_get_current_design_context();
+    decl names = list();
+    decl iter = db_create_inst_iter(context);
+    while (db_inst_iter_is_valid(iter))
+    {
+        decl inst = db_inst_iter_get_instance(iter);
+        if (_sym_sim_port_cell(db_get_instance_cell_name(inst)))
+            names = append(names, list(db_get_instance_name(inst)));
+        iter = db_inst_iter_get_next(iter);
+    }
+    decl i;
+    for (i = 0; i < listlen(names); i++)
+    {
+        de_deselect_all();
+        de_select_by_name(nth(i, names), 1);
+        if (on)
+            de_activate();
+        else
+            de_deactivate();
+    }
+    de_deselect_all();
+}
+
+// 由原理图生成段 symbol（须在完整 ADS 引擎里执行：headless 生成的符号 ads.exe 不渲染）。
+// cellBase 格式 "lib:cell"，同 cell 下须已存在 :schematic 与 :symbol 两个视图。
+// de_generate_symbol_ex(symCtx, schCtx, leadLen, pinDist, isDual, replace)。
+defun gen_segment_symbol(cellBase)
+{
+    decl schName = strcat(cellBase, ":schematic");
+    decl schctx = db_get_design_context_from_name(schName, APPEND_DSN_MODE);
+    decl symctx = db_get_design_context_from_name(strcat(cellBase, ":symbol"), APPEND_DSN_MODE);
+    if (schctx == NULL || symctx == NULL)
+    {
+        _fix_fail(cellBase);
+        return -1;
+    }
+    // 记下段 cell 名，子页里按 cell 认层级实例（实例名可能不是 X_*）。
+    _fix_seg_cells = append(_fix_seg_cells, list(db_get_cell_name(symctx)));
+    de_bring_context_to_top_or_open_new_window(schctx);
+    _sym_toggle_sim_ports(FALSE);
+    de_generate_symbol_ex(symctx, schctx, 0.25, 0.25, 1, 1);
+    db_save_design_without_prompting(symctx);
+    _sym_toggle_sim_ports(TRUE);
+    db_save_design_without_prompting(schctx);
+    de_close_window();
+    _fix_ok_sym();
+    return 1;
+}

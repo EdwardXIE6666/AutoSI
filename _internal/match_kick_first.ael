@@ -1,0 +1,4 @@
+// match_kick.ael -- same ADS session only; a second ads.exe has no library
+load("C:/Project/autosi/match_50r.ael");
+de_open_workspace("C:/Project/autosi/FG161/OUTPUT/ADS/FG161-IN-10-01_PCB_20260316_ADS");
+match_50r_run_first();

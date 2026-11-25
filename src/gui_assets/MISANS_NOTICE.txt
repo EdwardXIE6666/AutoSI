@@ -1,0 +1,7 @@
+AutoSI uses the MiSans typeface for Chinese text.
+MiSans is Copyright (c) Xiaomi Inc.
+
+MiSans is used under the MiSans Fonts Intellectual Property License Agreement:
+https://hyperos.mi.com/font/en/download/
+
+The complete license agreement is distributed as MISANS_LICENSE.pdf.

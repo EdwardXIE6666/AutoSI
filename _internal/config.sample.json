@@ -1,0 +1,10 @@
+{
+  "clip_margin": "2.2mm",
+  "sweep_step_mhz": 1,
+  "subproject_prefix": "SubProject_",
+  "retry_attempts": 2,
+  "continue_on_error": true,
+  "com_timeout": 1200,
+  "log_file": "8_log/功能2_SIwave抽取/siwave_extractor.log",
+  "ref_net": "GND"
+}

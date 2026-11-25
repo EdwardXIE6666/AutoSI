@@ -1,0 +1,92 @@
+# AutoSI 工作区 git 备份忽略表
+# 原则：只纳入「源码 + 文档 + 脚本」，排除产物 / 大文件 / 用户数据 / 私钥。
+# 纳入清单见 回溯说明.md；排除规则如下。
+
+# —— 打包产物 / 二进制 / 大依赖 ——
+*.exe
+程序/
+dist/
+环境安装包/
+
+# —— 发布产物（发布.ps1 生成的发布目录与压缩包，不进 git）——
+AutoSI_v*/
+*.7z
+*.zip
+
+# —— 红线资产（1.17GB，含签名保护，绝不进 git）——
+2_S参数库/
+
+# —— 用户输入数据 / 工程文件（用户自行放入，不纳入版本管理）——
+0_板材库/
+0_ODB/
+1_SCH_原理图/
+3_Siwave/
+
+# —— 根目录各工程工作副本（输入/输出不进快照）——
+FG*/INPUT/
+FG*/OUTPUT/
+
+# —— Grok 本地会话 ——
+.grok/
+
+# —— 运行产物 / 日志 / 缓存 ——
+2_输出_SIwave网络表/
+4_PCB_S参数/
+5_ADS仿真/
+6_PDF/
+7_refnum/
+8_log/
+.snp_verify_cache.json
+cell_fill_log.txt
+
+# —— Python 缓存 ——
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# —— IDE / 本地工具配置 ——
+.vscode/
+.claude/
+
+# —— 开发过程杂件（禁止再堆回根目录）——
+归档/
+design-md/
+code/
+src/prototype_assets/
+scripts/_debug*
+scripts/_diag*
+scripts/_tmp*
+scripts/_dbg*
+scripts/_inspect*
+scripts/_patch*
+scripts/_main_*
+scripts/_preview_*
+scripts/*.png
+scripts/*.txt
+scripts/*.log
+/_tmp_*
+/_fg*_diag.txt
+/_test_*.py
+/_inspect_*.py
+/_dbg_*.py
+/_patch_*.py
+Digraph.gv*
+_cleanup_log.txt
+MAIN.onefile-build/
+MAIN.build/
+MAIN.dist/
+
+# —— 本机路径（不进 git）——
+_internal/snp_library_path.txt
+
+# —— 安全：S 参数库封库私钥，绝不进 git ——
+开发者/开发者私钥.pem
+开发者/.last_lib_path.txt
+开发者/_vendor/
+开发者/_wheels/
+**/开发者私钥.pem
+**/.last_lib_path.txt
+AutoSI签发/
+*.$EST$
+~$*
